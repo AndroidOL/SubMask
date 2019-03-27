@@ -12,8 +12,7 @@
 #include "JuceHeader.h"
 
 //==============================================================================
-class SubMaskApplication : public JUCEApplication
-{
+class SubMaskApplication : public JUCEApplication {
 public:
     //==============================================================================
     SubMaskApplication() {}
@@ -33,14 +32,11 @@ public:
 
     //==============================================================================
     /*  */
-    class MainWindow : public DocumentWindow
-    {
+    class MainWindow : public DocumentWindow, public ChangeListener {
     public:
-        MainWindow() : DocumentWindow ("MainWindow", Colour (0x0), 0),
-            opacity (0.90f),
-            mouseIn (true)
-        {
-            centreWithSize (1024, 55);
+        MainWindow() : DocumentWindow ("MainWindow", Colours::transparentBlack, 0)
+		, opacity (0.80f), mouseIn (false) {
+            centreWithSize (1280, 55);
             setResizable (true, false);
             setResizeLimits (100, 50, 4096, 200);
 
@@ -52,12 +48,10 @@ public:
         }
 
         //==============================================================================
-        void paint (Graphics& g)
-        {
-            g.fillAll (Colours::black.withAlpha (opacity));
+        void paint (Graphics& g) {
+            g.fillAll (Colour(background.withAlpha (opacity)));
 
-            if (mouseIn)
-            {
+            if (mouseIn) {
                 g.setColour (Colours::cyan);
                 g.drawRect (0, 0, getWidth(), getHeight());
             }
@@ -67,66 +61,131 @@ public:
 
         //==============================================================================
         // 左键在窗口内拖拽：移动窗口。右键弹出菜单：更改透明度，退出。
-        void mouseDown (const MouseEvent& e)
-        {
+		void mouseDown (const MouseEvent& e) {
             // 此处需先调用父类的同名函数，否则鼠标左键在窗口内拖拽移动窗口时，窗口的左上角自动跳到鼠标指针处
             DocumentWindow::mouseDown (e);
+			// DBG(e.mods.isCtrlDown);
 
-            if (e.mods.isRightButtonDown())
-            {
-                PopupMenu menu;
+			if (e.mods.isRightButtonDown()) {
+				PopupMenu menu;
+				
+				menu.addItem (1, "Display Border", true, mouseIn);
+				menu.addItem (2, "Always on Top", true, isAlwaysOnTop());
+				menu.addSeparator();
 
-                menu.addItem (1, "Display Border", true, mouseIn);
-                menu.addSeparator();
+				menu.addItem (3, "Opacity + 0.05");
+				menu.addItem (4, "Opacity - 0.05");
+				menu.addSeparator();
+				
+				menu.addItem (5, "Background Picker");
+				menu.addItem (6, "Quit Application");
 
-                menu.addItem (2, "Opacity + 0.05");
-                menu.addItem (3, "Opacity - 0.05");
-                menu.addSeparator();
+				const int selectID = menu.show();
+				ColourSelector* colourSelector = new ColourSelector();
 
-                menu.addItem (5, "About UnderwaySoft...");
-                menu.addItem (4, "Quit");
+				switch (selectID) {
+					case 1:
+						mouseIn = !mouseIn;
+						break;
 
-                const int selectID = menu.show();
+					case 2:
+						setAlwaysOnTop(!isAlwaysOnTop());
+						break;
 
-                switch (selectID)
-                {
-                case 1:
-                    mouseIn = !mouseIn;
-                    repaint();
-                    break;
+					case 3:
+						opacity = jmin (opacity + 0.05f, 1.00f);
+						//DBG (opacity);
+						break;
 
-                case 2:
-                    opacity = jmin (opacity + 0.05f, 1.0f);
-                    repaint();
-                    //DBG (opacity);
-                    break;
+					case 4:
+						opacity = jmax (opacity - 0.05f, 0.10f);
+						//DBG (opacity);
+						break;
 
-                case 3:
-                    opacity = jmax (opacity - 0.05f, 0.0f);
-                    repaint();
-                    //DBG (opacity);
-                    break;
+					case 5:
+						colourSelector->setName("Background Picker");
+						colourSelector->setCurrentColour(findColour(TextButton::buttonColourId));
+						colourSelector->addChangeListener(this);
+						colourSelector->setColour(ColourSelector::backgroundColourId, Colours::transparentBlack);
+						colourSelector->setSize(300, 400);
 
-                case 4:
-                    JUCEApplication::getInstance()->systemRequestedQuit();
-                    break;
+						CallOutBox::launchAsynchronously(colourSelector, getScreenBounds(), nullptr);
+						break;
 
-                case 5:
-                    Process::openDocument("http://underwaySoft.com", String());
-                    break;
+					case 6:
+						JUCEApplication::getInstance()->systemRequestedQuit();
+						break;
 
-                default:
-                    break;
-                }
-            }
-        }
+					case 7:
+						Process::openDocument("http://underwaySoft.com", String());
+						break;
+
+					default:
+						break;
+				}
+			}
+			repaint();
+		}
+
+		//==============================================================================
+		// 监听事件回调：更改背景颜色。
+		void changeListenerCallback(ChangeBroadcaster* source) override {
+			if (ColourSelector *cs = dynamic_cast<ColourSelector*> (source)) {
+				background = Colour(cs->getCurrentColour());
+			}
+			repaint();
+		}
+
+		//==============================================================================
+		// 滚轮在垂直方向滚动：更改透明度。
+		void mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& w) {
+			if (e.mods.getNumMouseButtonsDown() == 0) {
+				if (w.deltaY > 0) {
+					opacity = jmin(opacity + 0.02f, 1.00f);
+				}
+				else {
+					opacity = jmax(opacity - 0.02f, 0.10f);
+				}
+				repaint();
+			}
+		}
+
+		//==============================================================================
+		// 方向键上下：更改透明度。方向键左右：调节音量。退格键：静音。
+		bool keyPressed(const KeyPress& k) override {
+			if (k.getKeyCode() == k.upKey) {
+				opacity = jmin(opacity + 0.05f, 1.00f);
+				repaint();
+			}
+			else if (k.getKeyCode() == k.downKey) {
+				opacity = jmax(opacity - 0.05f, 0.10f);
+				repaint();
+			}
+			else if (k.getKeyCode() == k.leftKey) {
+				float gain = SystemAudioVolume::getGain();
+				gain = jmin(gain - 0.05f, 1.00f);
+				SystemAudioVolume::setGain(gain);
+			}
+			else if (k.getKeyCode() == k.rightKey) {
+				float gain = SystemAudioVolume::getGain();
+				gain = jmax(gain + 0.05f, 0.00f);
+				SystemAudioVolume::setGain(gain);
+			}
+			else if (k.getKeyCode() == k.backspaceKey) {
+				SystemAudioVolume::setMuted(!SystemAudioVolume::isMuted());
+			}
+			else { }
+			return k.getKeyCode() >= 0 ? true : false;
+		}
 
 
-    private:
-        float opacity;
-        bool mouseIn;
+	private:
+		Colour background = Colours::black;
+		float opacity;
+		bool mouseIn;
+		ChangeListener *changeListenerColourPtr;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
+		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 
 private:
@@ -135,4 +194,4 @@ private:
 
 //==============================================================================
 
-START_JUCE_APPLICATION (SubMaskApplication)
+START_JUCE_APPLICATION (SubMaskApplication);
