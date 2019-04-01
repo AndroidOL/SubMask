@@ -1,15 +1,5 @@
-﻿/*
-  ==============================================================================
-
-    电影字幕遮盖器，鼠标右键弹出菜单：显示边框，增减透明度，退出，等。
-
-	作者：SwingCoder
-	http://underwaySoft.com
-
-  ==============================================================================
-*/
-
-#include "JuceHeader.h"
+#include <fstream>
+#include "../JuceLibraryCode/JuceHeader.h"
 
 //==============================================================================
 class SubMaskApplication : public JUCEApplication {
@@ -48,6 +38,7 @@ public:
         }
 
         //==============================================================================
+        // 绘制函数：绘制图形。
         void paint (Graphics& g) {
             g.fillAll (Colour(background.withAlpha (opacity)));
 
@@ -79,6 +70,7 @@ public:
 				
 				menu.addItem (5, "Background Picker");
 				menu.addItem (6, "Quit Application");
+				menu.addItem (7, "About UnderwaySoft...");
 
 				const int selectID = menu.show();
 				ColourSelector* colourSelector = new ColourSelector();
@@ -104,9 +96,8 @@ public:
 
 					case 5:
 						colourSelector->setName("Background Picker");
-						colourSelector->setCurrentColour(findColour(TextButton::buttonColourId));
+						colourSelector->setCurrentColour(background.withAlpha(opacity));
 						colourSelector->addChangeListener(this);
-						colourSelector->setColour(ColourSelector::backgroundColourId, Colours::transparentBlack);
 						colourSelector->setSize(300, 400);
 
 						CallOutBox::launchAsynchronously(colourSelector, getScreenBounds(), nullptr);
@@ -128,10 +119,16 @@ public:
 		}
 
 		//==============================================================================
-		// 监听事件回调：更改背景颜色。
+		// 颜色选择器回调事件：更改背景颜色以及透明度
 		void changeListenerCallback(ChangeBroadcaster* source) override {
 			if (ColourSelector *cs = dynamic_cast<ColourSelector*> (source)) {
 				background = Colour(cs->getCurrentColour());
+				opacity = int((float(cs->getCurrentColour().getAlpha()) / 0xFF) * 100) / float(100);
+				if (opacity < 0.1f) {
+					opacity = 0.1f;
+					cs->setCurrentColour(background.withAlpha(float(0.1)));
+				}
+				//log("info", "cs->getCurrentColour().getAlpha() - #" + String(cs->getCurrentColour().getAlpha()));
 			}
 			repaint();
 		}
@@ -178,18 +175,41 @@ public:
 			return k.getKeyCode() >= 0 ? true : false;
 		}
 
-
 	private:
 		Colour background = Colours::black;
 		float opacity;
 		bool mouseIn;
 		ChangeListener *changeListenerColourPtr;
 
+		//==============================================================================
+		// 返回当前时间
+		String getTime() {
+			time_t timep;
+			time(&timep); //获取time_t类型的当前时间
+			char tmp[64];
+			strftime(tmp, sizeof(tmp), "%Y-%m-%d %H:%M:%S", localtime(&timep));//对日期和时间进行格式化
+			return tmp;
+		}
+
+		//==============================================================================
+		// 写入日志文件
+		bool log(String lvl = "info", String msg = "null") {
+			std::ofstream myfile("./log.txt", std::ios::app);
+			if (myfile.is_open()) {
+				myfile << "[" << lvl << "] " << getTime() << ": " << msg << std::endl;
+				myfile.clear();
+				myfile.close();
+				return true;
+			}
+
+			return false;
+		}
+
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
-    };
+	};
 
 private:
-    ScopedPointer<MainWindow> mainWindow;
+	ScopedPointer<MainWindow> mainWindow;
 };
 
 //==============================================================================
